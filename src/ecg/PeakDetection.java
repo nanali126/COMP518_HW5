@@ -15,10 +15,13 @@ public class PeakDetection {
 	//         w = 20 (samples) and t(d) = sqrt(1.0 + d * d)
 
 	public static Query<Integer,Double> qLength() {
-		// adjust >> smooth >> deriv >> length
-
-		// TODO
-		return null;
+		Query<Integer,Integer> adjust = Q.map(x -> x - 1024);
+		Query<Integer,Integer> smoothSum = Q.sWindowNaive(5, 0, Integer::sum);
+		Query<Integer,Double> smoothDiv = Q.map(s -> s / 5.0);
+		Query<Double,Double> deriv = Q.sWindow3((a, b, c) -> (c - a) / 2.0);
+		Query<Double,Double> length = Q.sWindowNaive(41, 0.0,
+			(acc, d) -> acc + Math.sqrt(1.0 + d * d));
+		return Q.pipeline(adjust, smoothSum, smoothDiv, deriv, length);
 	}
 
 	// In order to detect peaks we need both the raw (or adjusted)
@@ -26,8 +29,14 @@ public class PeakDetection {
 	// Use the datatype VTL and implement the class Detect.
 
 	public static Query<Integer,Long> qPeaks() {
-		// TODO
-		return null;
+		Query<Integer,VT> branch1 = Q.pipeline(
+			Q.scan(new VT(0, -1), (prev, raw) -> new VT(raw - 1024, prev.ts + 1)),
+			Q.ignore(23)
+		);
+		Query<Integer,Double> branch2 = qLength();
+		Query<Integer,VTL> combined = Q.parallel(branch1, branch2,
+			(vt, l) -> vt.extendl(l));
+		return Q.pipeline(combined, new Detect());
 	}
 
 	public static void main(String[] args) {
