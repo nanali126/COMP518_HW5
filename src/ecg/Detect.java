@@ -3,43 +3,61 @@ package ecg;
 import dsl.Query;
 import dsl.Sink;
 
-// The detection algorithm (decision rule) that we described in class
-// (or your own slight variant of it).
-//
-// (1) Determine the threshold using the class TrainModel.
-//
-// (2) When l[n] exceeds the threhold, search for peak (max x[n] or raw[n])
-//     in the next 40 samples.
-//
-// (3) No peak should be detected for 72 samples after the last peak.
-//
-// OUTPUT: The timestamp of each peak.
-
 public class Detect implements Query<VTL,Long> {
 
-	// Choose this to be two times the average length
-	// over the entire signal.
-	private static final double THRESHOLD = 0.0; // TODO
+	private static final double THRESHOLD = 255.306;
 
-	// TODO
+	private boolean searching;
+	private int searchCountdown;
+	private int bestValue;
+	private long bestTimestamp;
+	private int refractoryCountdown;
 
 	public Detect() {
-		// TODO
 	}
 
 	@Override
 	public void start(Sink<Long> sink) {
-		// TODO
+		searching = false;
+		searchCountdown = 0;
+		bestValue = Integer.MIN_VALUE;
+		bestTimestamp = -1;
+		refractoryCountdown = 0;
 	}
 
 	@Override
 	public void next(VTL item, Sink<Long> sink) {
-		// TODO
+		if (refractoryCountdown > 0) {
+			refractoryCountdown--;
+			return;
+		}
+		if (searching) {
+			if (item.v > bestValue) {
+				bestValue = item.v;
+				bestTimestamp = item.ts;
+			}
+			searchCountdown--;
+			if (searchCountdown == 0) {
+				sink.next(bestTimestamp);
+				searching = false;
+				refractoryCountdown = 72;
+			}
+			return;
+		}
+		if (item.l > THRESHOLD) {
+			searching = true;
+			searchCountdown = 39;
+			bestValue = item.v;
+			bestTimestamp = item.ts;
+		}
 	}
 
 	@Override
 	public void end(Sink<Long> sink) {
-		// TODO
+		if (searching) {
+			sink.next(bestTimestamp);
+		}
+		sink.end();
 	}
-	
+
 }
